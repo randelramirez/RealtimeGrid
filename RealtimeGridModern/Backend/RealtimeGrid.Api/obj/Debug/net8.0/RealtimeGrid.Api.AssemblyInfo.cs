@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("RealtimeGrid.Api")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+a4c9857c066c665cde26d20d4d5735bbcc46da68")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+c055aff28e1136f421ff36b74180fff47ea4b68b")]
 [assembly: System.Reflection.AssemblyProductAttribute("RealtimeGrid.Api")]
 [assembly: System.Reflection.AssemblyTitleAttribute("RealtimeGrid.Api")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
