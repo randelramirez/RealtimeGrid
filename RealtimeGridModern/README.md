@@ -61,7 +61,7 @@ A real-time collaborative employee grid application built with .NET 8 Web API an
 
 ## Database
 
-The application uses SQLite with Entity Framework Core. The database is automatically created on first run with seed data for 5 employees.
+The application uses SQLite with Entity Framework Core. The database is automatically created on first run with seed data for 55 employees.
 
 Database file: `realtimegrid.db` (in the API project directory)
 
