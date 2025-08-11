@@ -1,5 +1,6 @@
 import EmployeeGrid from './components/EmployeeGrid';
 import { Toaster } from 'react-hot-toast';
+import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 import './App.css';
 
 function App() {
@@ -30,6 +31,7 @@ function App() {
           },
         }}
       />
+      <ReactQueryDevtools initialIsOpen={false} />
     </div>
   );
 }

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import type { Employee } from '../types/Employee';
-import { EmployeeService } from '../services/EmployeeService';
+import { useEmployees, useUpdateEmployee, useEmployeeRealtimeUpdates } from '../hooks/useEmployees';
 import { SignalRService } from '../services/SignalRService';
 import toast from 'react-hot-toast';
 import './EmployeeGrid.css';
@@ -93,27 +93,20 @@ const EmployeeRow: React.FC<EmployeeRowProps> = ({
 };
 
 const EmployeeGrid: React.FC = () => {
-  const [employees, setEmployees] = useState<Employee[]>([]);
-  const [loading, setLoading] = useState(true);
+  // Use TanStack Query for employees data
+  const { data: employees = [], isLoading, error } = useEmployees();
+  const updateEmployeeMutation = useUpdateEmployee();
+  const { updateEmployeeInCache } = useEmployeeRealtimeUpdates();
+  
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editingData, setEditingData] = useState<Partial<Employee>>({});
   const [lockedEmployees, setLockedEmployees] = useState<Set<number>>(new Set());
-  const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'disconnected'>('connecting');
+  const [connectionStatus, setConnectionStatus] = useState<'initial-connecting' | 'connected' | 'reconnecting' | 'disconnected'>('initial-connecting');
+  const [hasEverConnected, setHasEverConnected] = useState(false);
+  const initialConnectionAttemptedRef = useRef(false);
   const signalRService = useRef<SignalRService>(new SignalRService());
 
   useEffect(() => {
-    const loadEmployees = async () => {
-      try {
-        const data = await EmployeeService.getEmployees();
-        setEmployees(data);
-      } catch (error) {
-        console.error('Failed to load employees:', error);
-        toast.error('Failed to load employees');
-      } finally {
-        setLoading(false);
-      }
-    };
-
     // Define event handlers as stable references (only created once)
     const handleLockEmployee = (...args: unknown[]) => {
       const [id, lockingConnectionId] = args as [number, string];
@@ -152,15 +145,33 @@ const EmployeeGrid: React.FC = () => {
       const [id, propertyName, value, updatedByConnectionId] = args as [number, string, unknown, string];
       const currentConnectionId = signalRService.current.getConnectionId();
       
-      // Update the employee data regardless of who updated it
-      setEmployees(prev => prev.map(emp => 
-        emp.id === id ? { ...emp, [propertyName]: value } : emp
-      ));
+      // Update the employee data in the React Query cache
+      updateEmployeeInCache(id, propertyName, value);
       
       // Only show notification if it's not from this connection
       if (updatedByConnectionId !== currentConnectionId) {
         toast.success(`Employee ${id} updated by another user`);
       }
+    };
+
+    // Add connection state monitoring
+    const handleConnectionClosed = () => {
+      console.log('Connection lost, attempting to reconnect...');
+      if (hasEverConnected) {
+        setConnectionStatus('reconnecting');
+        // SignalR's automatic reconnect will handle this
+      }
+    };
+
+    const handleConnectionReconnecting = () => {
+      console.log('SignalR is attempting to reconnect...');
+      setConnectionStatus('reconnecting');
+    };
+
+    const handleConnectionReconnected = () => {
+      console.log('SignalR reconnected successfully');
+      setConnectionStatus('connected');
+      toast.success('Real-time connection restored!');
     };
 
     // Register event handlers only once
@@ -170,18 +181,23 @@ const EmployeeGrid: React.FC = () => {
     service.on('LockFailed', handleLockFailed);
     service.on('LockStatusUpdate', handleLockStatusUpdate);
     service.on('EmployeeUpdated', handleEmployeeUpdated);
+    service.on('ConnectionClosed', handleConnectionClosed);
+    service.on('ConnectionReconnecting', handleConnectionReconnecting);
+    service.on('ConnectionReconnected', handleConnectionReconnected);
 
-    const connectSignalR = async (retryCount = 0) => {
-      const maxRetries = 5; // Increased retry count
+    const connectSignalR = async () => {
+      // Prevent multiple connection attempts
+      if (initialConnectionAttemptedRef.current) {
+        return;
+      }
+      
+      initialConnectionAttemptedRef.current = true;
+      setConnectionStatus('initial-connecting');
       
       try {
-        // Add a delay before connection, especially on first attempt
-        if (retryCount === 0) {
-          await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second on first attempt
-        }
-        
         await service.connect();
         setConnectionStatus('connected');
+        setHasEverConnected(true);
         console.log('SignalR connected successfully');
 
         // Get initial lock status
@@ -191,26 +207,15 @@ const EmployeeGrid: React.FC = () => {
           console.warn('Failed to get initial lock status:', lockStatusError);
         }
       } catch (error) {
-        console.error('Failed to connect to SignalR:', error);
+        console.error('Failed to connect to SignalR on initial attempt:', error);
         setConnectionStatus('disconnected');
         
-        if (retryCount < maxRetries) {
-          const delay = Math.min(1000 * Math.pow(2, retryCount), 5000); // Exponential backoff up to 5 seconds
-          console.log(`Retrying SignalR connection in ${delay}ms... (attempt ${retryCount + 1}/${maxRetries})`);
-          
-          // Only show toast on first failure and final failure
-          if (retryCount === 0) {
-            toast.error('Connection to real-time updates failed. Retrying...');
-          }
-          
-          setTimeout(() => connectSignalR(retryCount + 1), delay);
-        } else {
-          toast.error('Failed to connect to real-time updates after multiple attempts. Refreshing the page may help.');
-        }
+        // Only show error toast for initial connection failure
+        toast.error('Could not establish real-time connection. Some features may be limited.');
       }
     };
 
-    loadEmployees();
+    // No need to loadEmployees() - TanStack Query handles this
     connectSignalR();
 
     return () => {
@@ -220,9 +225,13 @@ const EmployeeGrid: React.FC = () => {
       service.off('LockFailed', handleLockFailed);
       service.off('LockStatusUpdate', handleLockStatusUpdate);
       service.off('EmployeeUpdated', handleEmployeeUpdated);
+      service.off('ConnectionClosed', handleConnectionClosed);
+      service.off('ConnectionReconnecting', handleConnectionReconnecting);
+      service.off('ConnectionReconnected', handleConnectionReconnected);
       service.disconnect();
     };
-  }, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Empty dependency array intentional - we want this to run only once on mount
 
   const handleEdit = async (id: number) => {
     const employee = employees.find(emp => emp.id === id);
@@ -252,12 +261,8 @@ const EmployeeGrid: React.FC = () => {
 
   const handleSave = async (id: number) => {
     try {
-      await EmployeeService.updateEmployee(id, editingData);
-      
-      // Update local state
-      setEmployees(prev => prev.map(emp => 
-        emp.id === id ? { ...emp, ...editingData } : emp
-      ));
+      // Use the mutation to update the employee
+      await updateEmployeeMutation.mutateAsync({ id, data: editingData });
 
       // Send updates through SignalR for each changed field (only if connected)
       if (signalRService.current.isConnected()) {
@@ -294,10 +299,10 @@ const EmployeeGrid: React.FC = () => {
         return newSet;
       });
 
-      toast.success('Employee updated successfully');
+      // Note: Success toast is handled by the mutation
     } catch (error) {
       console.error('Failed to save employee:', error);
-      toast.error('Failed to save employee');
+      // Error toast is handled by the mutation
     }
   };
 
@@ -333,17 +338,27 @@ const EmployeeGrid: React.FC = () => {
     }));
   };
 
-  if (loading) {
+  if (isLoading) {
     return <div className="loading">Loading employees...</div>;
+  }
+
+  if (error) {
+    return <div className="error">Error loading employees. Please try refreshing the page.</div>;
   }
 
   const getConnectionStatusInfo = () => {
     switch (connectionStatus) {
-      case 'connecting':
+      case 'initial-connecting':
         return {
-          backgroundColor: '#000000',
+          backgroundColor: '#fff3cd',
           borderColor: '#ffeaa7',
           message: '🔄 Connecting to real-time updates...'
+        };
+      case 'reconnecting':
+        return {
+          backgroundColor: '#fff3cd',
+          borderColor: '#ffeaa7',
+          message: '🔄 Reconnecting to real-time updates...'
         };
       case 'connected':
         return {
@@ -355,13 +370,15 @@ const EmployeeGrid: React.FC = () => {
         return {
           backgroundColor: '#f8d7da',
           borderColor: '#f5c6cb',
-          message: '❌ Disconnected - Limited functionality'
+          message: hasEverConnected 
+            ? '❌ Real-time updates disconnected - Please refresh the page'
+            : '❌ Could not establish real-time connection - Limited functionality'
         };
       default:
         return {
           backgroundColor: '#f8d7da',
           borderColor: '#f5c6cb',
-          message: '❌ Disconnected - Limited functionality'
+          message: '❌ Connection status unknown'
         };
     }
   };
