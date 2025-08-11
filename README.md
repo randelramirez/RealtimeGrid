@@ -1,11 +1,11 @@
 # RealtimeGrid - Modernized
 
-A real-time collaborative employee grid application built with .NET 8 Web API and React TypeScript.
+A real-time collaborative employee grid application built with .NET 9 Web API and React TypeScript.
 
 ## Migration from Legacy Version
 
 This modernized version replaces:
-- **.NET Framework 4.5** → **.NET 8**
+- **.NET Framework 4.5** → **.NET 9**
 - **ASP.NET MVC** → **ASP.NET Core Web API**
 - **jQuery + Knockout.js** → **React + TypeScript**
 - **SQL Server Compact** → **SQLite with EF Core**
@@ -18,18 +18,18 @@ The core functionality (real-time collaborative editing with row locking) remain
 - **Real-time collaboration**: Multiple users can edit the grid simultaneously with live updates
 - **Row locking**: When a user starts editing a row, it gets locked for other users
 - **SignalR integration**: Real-time communication between frontend and backend
-- **Modern tech stack**: .NET 8 + React 18 + TypeScript + Vite
+- **Modern tech stack**: .NET 9 + React 19 + TypeScript + Vite
 - **SQLite database**: Lightweight database for local development
 
 ## Architecture
 
-### Backend (.NET 8 Web API)
+### Backend (.NET 9 Web API)
 - **RealtimeGrid.Api**: Web API with SignalR hub
 - **Entity Framework Core**: ORM with SQLite provider
 - **SignalR Hub**: Handles real-time communication for employee locking/unlocking and updates
 
 ### Frontend (React TypeScript + Vite)
-- **React 18**: Modern UI library with hooks
+- **React 19**: Modern UI library with hooks
 - **TypeScript**: Type safety and better developer experience
 - **Vite**: Fast build tool and development server
 - **SignalR Client**: Real-time communication with the backend
@@ -38,21 +38,21 @@ The core functionality (real-time collaborative editing with row locking) remain
 ## Getting Started
 
 ### Prerequisites
-- .NET 8 SDK
-- Node.js (v16 or later)
+- .NET 9 SDK
+- Node.js (v18 or later)
 - npm or yarn
 
 ### Running the Application
 
 1. **Start the Backend API:**
    ```bash
-   cd RealtimeGridModern/Backend/RealtimeGrid.Api
+   cd Backend/RealtimeGrid.Api
    dotnet run --urls=http://localhost:5000
    ```
 
 2. **Start the Frontend (in a new terminal):**
    ```bash
-   cd RealtimeGridModern/Frontend/realtime-grid-frontend
+   cd Frontend/realtime-grid-frontend
    npm install  # First time only
    npm run dev
    ```
@@ -96,13 +96,13 @@ Database file: `realtimegrid.db` (in the API project directory)
 
 ### Backend Development
 ```bash
-cd RealtimeGridModern/Backend/RealtimeGrid.Api
+cd Backend/RealtimeGrid.Api
 dotnet watch run --urls=http://localhost:5000
 ```
 
 ### Frontend Development
 ```bash
-cd RealtimeGridModern/Frontend/realtime-grid-frontend
+cd Frontend/realtime-grid-frontend
 npm run dev
 ```
 
@@ -110,13 +110,13 @@ npm run dev
 
 **Backend:**
 ```bash
-cd RealtimeGridModern/Backend/RealtimeGrid.Api
+cd Backend/RealtimeGrid.Api
 dotnet publish -c Release -o publish
 ```
 
 **Frontend:**
 ```bash
-cd RealtimeGridModern/Frontend/realtime-grid-frontend
+cd Frontend/realtime-grid-frontend
 npm run build
 # Built files will be in the 'dist' directory
 ```
