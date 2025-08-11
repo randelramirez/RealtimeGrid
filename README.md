@@ -2,6 +2,17 @@
 
 A real-time collaborative employee grid application built with .NET 8 Web API and React TypeScript.
 
+## Migration from Legacy Version
+
+This modernized version replaces:
+- **.NET Framework 4.5** → **.NET 8**
+- **ASP.NET MVC** → **ASP.NET Core Web API**
+- **jQuery + Knockout.js** → **React + TypeScript**
+- **SQL Server Compact** → **SQLite with EF Core**
+- **Old SignalR 1.x** → **Modern SignalR Core**
+
+The core functionality (real-time collaborative editing with row locking) remains the same but with a modern, maintainable architecture.
+
 ## Features
 
 - **Real-time collaboration**: Multiple users can edit the grid simultaneously with live updates
@@ -109,14 +120,3 @@ cd RealtimeGridModern/Frontend/realtime-grid-frontend
 npm run build
 # Built files will be in the 'dist' directory
 ```
-
-## Migration from Legacy Version
-
-This modernized version replaces:
-- **.NET Framework 4.5** → **.NET 8**
-- **ASP.NET MVC** → **ASP.NET Core Web API**
-- **jQuery + Knockout.js** → **React + TypeScript**
-- **SQL Server Compact** → **SQLite with EF Core**
-- **Old SignalR 1.x** → **Modern SignalR Core**
-
-The core functionality (real-time collaborative editing with row locking) remains the same but with a modern, maintainable architecture.
