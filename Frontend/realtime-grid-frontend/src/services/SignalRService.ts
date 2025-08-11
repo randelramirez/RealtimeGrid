@@ -47,14 +47,17 @@ export class SignalRService {
       this.connection.onclose(() => {
         console.log('SignalR connection closed');
         this.eventHandlersSetup = false; // Reset when connection closes
+        this.trigger('ConnectionClosed');
       });
 
       this.connection.onreconnecting(() => {
         console.log('SignalR connection reconnecting');
+        this.trigger('ConnectionReconnecting');
       });
 
       this.connection.onreconnected(() => {
         console.log('SignalR connection reconnected');
+        this.trigger('ConnectionReconnected');
       });
 
       await this.connection.start();
