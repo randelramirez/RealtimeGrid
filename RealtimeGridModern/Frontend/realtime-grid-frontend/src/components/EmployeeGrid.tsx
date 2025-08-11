@@ -98,7 +98,7 @@ const EmployeeGrid: React.FC = () => {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editingData, setEditingData] = useState<Partial<Employee>>({});
   const [lockedEmployees, setLockedEmployees] = useState<Set<number>>(new Set());
-  const [signalRConnected, setSignalRConnected] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'disconnected'>('connecting');
   const signalRService = useRef<SignalRService>(new SignalRService());
 
   useEffect(() => {
@@ -126,7 +126,7 @@ const EmployeeGrid: React.FC = () => {
         }
         
         await service.connect();
-        setSignalRConnected(true);
+        setConnectionStatus('connected');
         console.log('SignalR connected successfully');
         
         service.on('LockEmployee', (...args: unknown[]) => {
@@ -185,7 +185,7 @@ const EmployeeGrid: React.FC = () => {
         }
       } catch (error) {
         console.error('Failed to connect to SignalR:', error);
-        setSignalRConnected(false);
+        setConnectionStatus('disconnected');
         
         if (retryCount < maxRetries) {
           const delay = Math.min(1000 * Math.pow(2, retryCount), 5000); // Exponential backoff up to 5 seconds
@@ -325,11 +325,42 @@ const EmployeeGrid: React.FC = () => {
     return <div className="loading">Loading employees...</div>;
   }
 
+  const getConnectionStatusInfo = () => {
+    switch (connectionStatus) {
+      case 'connecting':
+        return {
+          backgroundColor: '#fff3cd',
+          borderColor: '#ffeaa7',
+          message: '🔄 Connecting to real-time updates...'
+        };
+      case 'connected':
+        return {
+          backgroundColor: '#d4edda',
+          borderColor: '#c3e6cb',
+          message: '✅ Connected to real-time updates'
+        };
+      case 'disconnected':
+        return {
+          backgroundColor: '#f8d7da',
+          borderColor: '#f5c6cb',
+          message: '❌ Disconnected - Limited functionality'
+        };
+      default:
+        return {
+          backgroundColor: '#f8d7da',
+          borderColor: '#f5c6cb',
+          message: '❌ Disconnected - Limited functionality'
+        };
+    }
+  };
+
+  const statusInfo = getConnectionStatusInfo();
+
   return (
     <div className="employee-grid">
       <h1 style={{color:'blue'}}>Real-time Employee Grid</h1>
-      <div className="status-bar" style={{ marginBottom: '1rem', padding: '0.5rem', backgroundColor: signalRConnected ? '#d4edda' : '#f8d7da', border: '1px solid ' + (signalRConnected ? '#c3e6cb' : '#f5c6cb'), borderRadius: '0.25rem' }}>
-        <strong>Connection Status:</strong> {signalRConnected ? '✅ Connected to real-time updates' : '❌ Disconnected - Limited functionality'}
+      <div className="status-bar" style={{ marginBottom: '1rem', padding: '0.5rem', backgroundColor: statusInfo.backgroundColor, border: '1px solid ' + statusInfo.borderColor, borderRadius: '0.25rem' }}>
+        <strong>Connection Status:</strong> {statusInfo.message}
       </div>
       <p className="instructions">
         Open this page in multiple browser windows/tabs to see real-time collaborative editing in action!
