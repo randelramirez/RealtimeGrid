@@ -114,12 +114,67 @@ const EmployeeGrid: React.FC = () => {
       }
     };
 
+    // Define event handlers as stable references (only created once)
+    const handleLockEmployee = (...args: unknown[]) => {
+      const [id, lockingConnectionId] = args as [number, string];
+      const currentConnectionId = signalRService.current.getConnectionId();
+      
+      // Only show notification if it's not from this connection
+      if (lockingConnectionId !== currentConnectionId) {
+        setLockedEmployees(prev => new Set([...prev, id]));
+        toast.success(`Employee ${id} locked by another user`);
+      } else {
+        // Still update the state for our own locks
+        setLockedEmployees(prev => new Set([...prev, id]));
+      }
+    };
+
+    const handleUnlockEmployee = (...args: unknown[]) => {
+      const [id] = args as [number];
+      setLockedEmployees(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(id);
+        return newSet;
+      });
+    };
+
+    const handleLockFailed = (...args: unknown[]) => {
+      const [id] = args as [number];
+      toast.error(`Cannot edit employee ${id} - already locked by another user`);
+    };
+
+    const handleLockStatusUpdate = (...args: unknown[]) => {
+      const [lockStatus] = args as [Record<number, string>];
+      setLockedEmployees(new Set(Object.keys(lockStatus).map(Number)));
+    };
+
+    const handleEmployeeUpdated = (...args: unknown[]) => {
+      const [id, propertyName, value, updatedByConnectionId] = args as [number, string, unknown, string];
+      const currentConnectionId = signalRService.current.getConnectionId();
+      
+      // Update the employee data regardless of who updated it
+      setEmployees(prev => prev.map(emp => 
+        emp.id === id ? { ...emp, [propertyName]: value } : emp
+      ));
+      
+      // Only show notification if it's not from this connection
+      if (updatedByConnectionId !== currentConnectionId) {
+        toast.success(`Employee ${id} updated by another user`);
+      }
+    };
+
+    // Register event handlers only once
+    const service = signalRService.current;
+    service.on('LockEmployee', handleLockEmployee);
+    service.on('UnlockEmployee', handleUnlockEmployee);
+    service.on('LockFailed', handleLockFailed);
+    service.on('LockStatusUpdate', handleLockStatusUpdate);
+    service.on('EmployeeUpdated', handleEmployeeUpdated);
+
     const connectSignalR = async (retryCount = 0) => {
       const maxRetries = 5; // Increased retry count
       
       try {
-        const service = signalRService.current;
-        
         // Add a delay before connection, especially on first attempt
         if (retryCount === 0) {
           await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second on first attempt
@@ -128,54 +183,6 @@ const EmployeeGrid: React.FC = () => {
         await service.connect();
         setConnectionStatus('connected');
         console.log('SignalR connected successfully');
-        
-        service.on('LockEmployee', (...args: unknown[]) => {
-          const [id, lockingConnectionId] = args as [number, string];
-          const currentConnectionId = service.getConnectionId();
-          
-          // Only show notification if it's not from this connection
-          if (lockingConnectionId !== currentConnectionId) {
-            setLockedEmployees(prev => new Set([...prev, id]));
-            toast.success(`Employee ${id} locked by another user`);
-          } else {
-            // Still update the state for our own locks
-            setLockedEmployees(prev => new Set([...prev, id]));
-          }
-        });
-
-        service.on('UnlockEmployee', (...args: unknown[]) => {
-          const [id] = args as [number];
-          setLockedEmployees(prev => {
-            const newSet = new Set(prev);
-            newSet.delete(id);
-            return newSet;
-          });
-        });
-
-        service.on('LockFailed', (...args: unknown[]) => {
-          const [id] = args as [number];
-          toast.error(`Cannot edit employee ${id} - already locked by another user`);
-        });
-
-        service.on('LockStatusUpdate', (...args: unknown[]) => {
-          const [lockStatus] = args as [Record<number, string>];
-          setLockedEmployees(new Set(Object.keys(lockStatus).map(Number)));
-        });
-
-        service.on('EmployeeUpdated', (...args: unknown[]) => {
-          const [id, propertyName, value, updatedByConnectionId] = args as [number, string, unknown, string];
-          const currentConnectionId = service.getConnectionId();
-          
-          // Update the employee data regardless of who updated it
-          setEmployees(prev => prev.map(emp => 
-            emp.id === id ? { ...emp, [propertyName]: value } : emp
-          ));
-          
-          // Only show notification if it's not from this connection
-          if (updatedByConnectionId !== currentConnectionId) {
-            toast.success(`Employee ${id} updated by another user`);
-          }
-        });
 
         // Get initial lock status
         try {
@@ -206,8 +213,13 @@ const EmployeeGrid: React.FC = () => {
     loadEmployees();
     connectSignalR();
 
-    const service = signalRService.current;
     return () => {
+      // Clean up event handlers
+      service.off('LockEmployee', handleLockEmployee);
+      service.off('UnlockEmployee', handleUnlockEmployee);
+      service.off('LockFailed', handleLockFailed);
+      service.off('LockStatusUpdate', handleLockStatusUpdate);
+      service.off('EmployeeUpdated', handleEmployeeUpdated);
       service.disconnect();
     };
   }, []);
@@ -329,7 +341,7 @@ const EmployeeGrid: React.FC = () => {
     switch (connectionStatus) {
       case 'connecting':
         return {
-          backgroundColor: '#fff3cd',
+          backgroundColor: '#000000',
           borderColor: '#ffeaa7',
           message: '🔄 Connecting to real-time updates...'
         };
