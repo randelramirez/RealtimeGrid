@@ -1,6 +1,6 @@
 import type { Employee } from '../types/Employee';
 
-const API_BASE_URL = 'http://localhost:5000/api';
+const API_BASE_URL = 'http://localhost:5043/api';
 
 export class EmployeeService {
   static async getEmployees(): Promise<Employee[]> {

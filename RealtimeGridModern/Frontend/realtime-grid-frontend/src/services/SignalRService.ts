@@ -6,7 +6,7 @@ export class SignalRService {
 
   async connect(): Promise<void> {
     this.connection = new HubConnectionBuilder()
-      .withUrl('http://localhost:5000/employeeHub')
+      .withUrl('http://localhost:5043/employeeHub')
       .build();
 
     // Set up event handlers

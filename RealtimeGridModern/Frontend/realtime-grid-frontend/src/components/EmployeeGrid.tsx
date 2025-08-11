@@ -28,10 +28,10 @@ const EmployeeRow: React.FC<EmployeeRowProps> = ({
     return (
       <tr className="locked-row">
         <td><button className="btn btn-danger" disabled>Locked</button></td>
-        <td>{employee.name}</td>
-        <td>{employee.sex}</td>
-        <td>{employee.email}</td>
-        <td>${employee.salary.toLocaleString()}</td>
+        <td style={{ color: 'blue' }}>{employee.name}</td>
+        <td style={{ color: 'blue' }}>{employee.sex}</td>
+        <td style={{ color: 'blue' }}>{employee.email}</td>
+        <td style={{ color: 'blue' }}>${employee.salary.toLocaleString()}</td>
       </tr>
     );
   }
@@ -82,10 +82,10 @@ const EmployeeRow: React.FC<EmployeeRowProps> = ({
   return (
     <tr>
       <td><button className="btn btn-primary" onClick={() => onEdit(employee.id)}>Edit</button></td>
-      <td>{employee.name}</td>
-      <td>{employee.sex}</td>
-      <td>{employee.email}</td>
-      <td>${employee.salary.toLocaleString()}</td>
+      <td style={{color: 'blue'}}>{employee.name}</td>
+      <td style={{color: 'blue'}}>{employee.sex}</td>
+      <td style={{color: 'blue'}}>{employee.email}</td>
+      <td style={{color: 'blue'}}>${employee.salary.toLocaleString()}</td>
     </tr>
   );
 };
@@ -213,7 +213,7 @@ const EmployeeGrid: React.FC = () => {
 
   return (
     <div className="employee-grid">
-      <h1>Real-time Employee Grid</h1>
+      <h1 style={{color:'blue'}}>Real-time Employee Grid</h1>
       <p className="instructions">
         Open this page in multiple browser windows/tabs to see real-time collaborative editing in action!
       </p>
