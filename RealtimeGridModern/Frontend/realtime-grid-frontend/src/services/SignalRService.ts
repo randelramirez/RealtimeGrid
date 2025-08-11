@@ -6,7 +6,7 @@ export class SignalRService {
 
   async connect(): Promise<void> {
     this.connection = new HubConnectionBuilder()
-      .withUrl('http://localhost:5043/employeeHub')
+      .withUrl('http://localhost:5000/employeeHub')
       .build();
 
     // Set up event handlers
@@ -16,6 +16,14 @@ export class SignalRService {
 
     this.connection.on('UnlockEmployee', (id: number) => {
       this.trigger('UnlockEmployee', id);
+    });
+
+    this.connection.on('LockFailed', (id: number) => {
+      this.trigger('LockFailed', id);
+    });
+
+    this.connection.on('LockStatusUpdate', (lockStatus: Record<number, string>) => {
+      this.trigger('LockStatusUpdate', lockStatus);
     });
 
     this.connection.on('EmployeeUpdated', (id: number, propertyName: string, value: any) => {
@@ -48,6 +56,12 @@ export class SignalRService {
   async updateEmployee(id: number, propertyName: string, value: any): Promise<void> {
     if (this.connection) {
       await this.connection.invoke('UpdateEmployee', id, propertyName, value);
+    }
+  }
+
+  async getLockStatus(): Promise<void> {
+    if (this.connection) {
+      await this.connection.invoke('GetLockStatus');
     }
   }
 

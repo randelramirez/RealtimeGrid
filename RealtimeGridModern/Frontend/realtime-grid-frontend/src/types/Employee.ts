@@ -4,5 +4,4 @@ export interface Employee {
   email: string;
   sex: string;
   salary: number;
-  locked: boolean;
 }

@@ -7,6 +7,7 @@ import './EmployeeGrid.css';
 
 interface EmployeeRowProps {
   employee: Employee;
+  isLocked: boolean;
   isEditing: boolean;
   onEdit: (id: number) => void;
   onSave: (id: number) => void;
@@ -17,6 +18,7 @@ interface EmployeeRowProps {
 
 const EmployeeRow: React.FC<EmployeeRowProps> = ({
   employee,
+  isLocked,
   isEditing,
   onEdit,
   onSave,
@@ -24,7 +26,7 @@ const EmployeeRow: React.FC<EmployeeRowProps> = ({
   onFieldChange,
   editingData
 }) => {
-  if (employee.locked && !isEditing) {
+  if (isLocked && !isEditing) {
     return (
       <tr className="locked-row">
         <td><button className="btn btn-danger" disabled>Locked</button></td>
@@ -95,6 +97,7 @@ const EmployeeGrid: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editingData, setEditingData] = useState<Partial<Employee>>({});
+  const [lockedEmployees, setLockedEmployees] = useState<Set<number>>(new Set());
   const signalRService = useRef<SignalRService>(new SignalRService());
 
   useEffect(() => {
@@ -114,17 +117,25 @@ const EmployeeGrid: React.FC = () => {
       try {
         await signalRService.current.connect();
         
-        signalRService.current.on('LockEmployee', (id: number) => {
-          setEmployees(prev => prev.map(emp => 
-            emp.id === id ? { ...emp, locked: true } : emp
-          ));
+        signalRService.current.on('LockEmployee', (id: number, _connectionId: string) => {
+          setLockedEmployees(prev => new Set([...prev, id]));
           toast.success(`Employee ${id} locked by another user`);
         });
 
         signalRService.current.on('UnlockEmployee', (id: number) => {
-          setEmployees(prev => prev.map(emp => 
-            emp.id === id ? { ...emp, locked: false } : emp
-          ));
+          setLockedEmployees(prev => {
+            const newSet = new Set(prev);
+            newSet.delete(id);
+            return newSet;
+          });
+        });
+
+        signalRService.current.on('LockFailed', (id: number) => {
+          toast.error(`Cannot edit employee ${id} - already locked by another user`);
+        });
+
+        signalRService.current.on('LockStatusUpdate', (lockStatus: Record<number, string>) => {
+          setLockedEmployees(new Set(Object.keys(lockStatus).map(Number)));
         });
 
         signalRService.current.on('EmployeeUpdated', (id: number, propertyName: string, value: any) => {
@@ -133,6 +144,9 @@ const EmployeeGrid: React.FC = () => {
           ));
           toast.success(`Employee ${id} updated by another user`);
         });
+
+        // Get initial lock status
+        await signalRService.current.getLockStatus();
       } catch (error) {
         console.error('Failed to connect to SignalR:', error);
         toast.error('Failed to connect to real-time updates');
@@ -150,6 +164,12 @@ const EmployeeGrid: React.FC = () => {
   const handleEdit = async (id: number) => {
     const employee = employees.find(emp => emp.id === id);
     if (!employee) return;
+
+    // Check if employee is already locked
+    if (lockedEmployees.has(id)) {
+      toast.error('This employee is currently being edited by another user');
+      return;
+    }
 
     try {
       await signalRService.current.lockEmployee(id);
@@ -183,6 +203,14 @@ const EmployeeGrid: React.FC = () => {
       await signalRService.current.unlockEmployee(id);
       setEditingId(null);
       setEditingData({});
+      
+      // Remove from locked state locally (will be confirmed by SignalR)
+      setLockedEmployees(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(id);
+        return newSet;
+      });
+
       toast.success('Employee updated successfully');
     } catch (error) {
       console.error('Failed to save employee:', error);
@@ -195,6 +223,13 @@ const EmployeeGrid: React.FC = () => {
       await signalRService.current.unlockEmployee(id);
       setEditingId(null);
       setEditingData({});
+      
+      // Remove from locked state locally (will be confirmed by SignalR)
+      setLockedEmployees(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(id);
+        return newSet;
+      });
     } catch (error) {
       console.error('Failed to unlock employee:', error);
     }
@@ -233,6 +268,7 @@ const EmployeeGrid: React.FC = () => {
             <EmployeeRow
               key={employee.id}
               employee={employee}
+              isLocked={lockedEmployees.has(employee.id)}
               isEditing={editingId === employee.id}
               onEdit={handleEdit}
               onSave={handleSave}

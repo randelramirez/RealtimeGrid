@@ -9,6 +9,9 @@ namespace RealtimeGrid.Api.Hubs
     public class EmployeeHub : Hub
     {
         private readonly RealtimeGridContext _context;
+        // In-memory storage for locked employees (employeeId -> connectionId)
+        private static readonly ConcurrentDictionary<int, string> _lockedEmployees = new();
+        // Track which employees each connection has locked
         private static readonly ConcurrentDictionary<string, List<int>> _connectionMappings = new();
 
         public EmployeeHub(RealtimeGridContext context)
@@ -26,16 +29,11 @@ namespace RealtimeGrid.Api.Hubs
         {
             if (_connectionMappings.TryGetValue(Context.ConnectionId, out var lockedEmployees))
             {
+                // Unlock all employees that were locked by this connection
                 foreach (var employeeId in lockedEmployees)
                 {
-                    var employee = await _context.Employees.FindAsync(employeeId);
-                    if (employee != null)
-                    {
-                        employee.Locked = false;
-                        _context.Entry(employee).State = EntityState.Modified;
-                        await _context.SaveChangesAsync();
-                        await Clients.Others.SendAsync("UnlockEmployee", employeeId);
-                    }
+                    _lockedEmployees.TryRemove(employeeId, out _);
+                    await Clients.Others.SendAsync("UnlockEmployee", employeeId);
                 }
                 _connectionMappings.TryRemove(Context.ConnectionId, out _);
             }
@@ -45,67 +43,82 @@ namespace RealtimeGrid.Api.Hubs
 
         public async Task Lock(int id)
         {
-            var employee = await _context.Employees.FindAsync(id);
-            if (employee != null && !employee.Locked)
+            // Check if employee is already locked by another connection
+            if (_lockedEmployees.TryAdd(id, Context.ConnectionId))
             {
-                employee.Locked = true;
-                _context.Entry(employee).State = EntityState.Modified;
-                await _context.SaveChangesAsync();
-                
+                // Successfully locked, add to connection mappings
                 if (_connectionMappings.TryGetValue(Context.ConnectionId, out var list))
                 {
                     list.Add(id);
                 }
                 
+                // Notify other clients that this employee is now locked
                 await Clients.Others.SendAsync("LockEmployee", id, Context.ConnectionId);
+            }
+            else
+            {
+                // Employee is already locked, notify the caller
+                await Clients.Caller.SendAsync("LockFailed", id);
             }
         }
 
         public async Task Unlock(int id)
         {
-            var employee = await _context.Employees.FindAsync(id);
-            if (employee != null)
+            // Check if this connection owns the lock
+            if (_lockedEmployees.TryGetValue(id, out var lockingConnectionId) && 
+                lockingConnectionId == Context.ConnectionId)
             {
-                employee.Locked = false;
-                _context.Entry(employee).State = EntityState.Modified;
-                await _context.SaveChangesAsync();
+                _lockedEmployees.TryRemove(id, out _);
                 
                 if (_connectionMappings.TryGetValue(Context.ConnectionId, out var list))
                 {
                     list.Remove(id);
                 }
                 
+                // Notify other clients that this employee is now unlocked
                 await Clients.Others.SendAsync("UnlockEmployee", id);
             }
         }
 
         public async Task UpdateEmployee(int id, string propertyName, object value)
         {
-            var employee = await _context.Employees.FindAsync(id);
-            if (employee != null)
+            // Only allow updates if the current connection has the employee locked
+            if (_lockedEmployees.TryGetValue(id, out var lockingConnectionId) && 
+                lockingConnectionId == Context.ConnectionId)
             {
-                switch (propertyName.ToLower())
+                var employee = await _context.Employees.FindAsync(id);
+                if (employee != null)
                 {
-                    case "name":
-                        employee.Name = value?.ToString() ?? string.Empty;
-                        break;
-                    case "email":
-                        employee.Email = value?.ToString() ?? string.Empty;
-                        break;
-                    case "sex":
-                        employee.Sex = value?.ToString() ?? string.Empty;
-                        break;
-                    case "salary":
-                        if (decimal.TryParse(value?.ToString(), out var salary))
-                            employee.Salary = salary;
-                        break;
-                }
+                    switch (propertyName.ToLower())
+                    {
+                        case "name":
+                            employee.Name = value?.ToString() ?? string.Empty;
+                            break;
+                        case "email":
+                            employee.Email = value?.ToString() ?? string.Empty;
+                            break;
+                        case "sex":
+                            employee.Sex = value?.ToString() ?? string.Empty;
+                            break;
+                        case "salary":
+                            if (decimal.TryParse(value?.ToString(), out var salary))
+                                employee.Salary = salary;
+                            break;
+                    }
 
-                _context.Entry(employee).State = EntityState.Modified;
-                await _context.SaveChangesAsync();
-                
-                await Clients.Others.SendAsync("EmployeeUpdated", id, propertyName, value);
+                    _context.Entry(employee).State = EntityState.Modified;
+                    await _context.SaveChangesAsync();
+                    
+                    // Notify all clients (including caller) of the update
+                    await Clients.All.SendAsync("EmployeeUpdated", id, propertyName, value);
+                }
             }
+        }
+
+        // Method to get the current lock status for all employees
+        public async Task GetLockStatus()
+        {
+            await Clients.Caller.SendAsync("LockStatusUpdate", _lockedEmployees.ToDictionary(kvp => kvp.Key, kvp => kvp.Value));
         }
     }
 }
