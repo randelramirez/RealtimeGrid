@@ -5,16 +5,19 @@ export class SignalRService {
   private callbacks: Map<string, ((...args: unknown[]) => void)[]> = new Map();
 
   async connect(): Promise<void> {
+    // Add a small delay before initial connection to ensure backend is ready
+    await new Promise(resolve => setTimeout(resolve, 500));
+    
     try {
       this.connection = new HubConnectionBuilder()
         .withUrl('http://localhost:5043/employeeHub', {
           timeout: 30000, // 30 seconds timeout
         })
-        .withAutomaticReconnect([0, 2000, 10000, 30000]) // Retry delays in ms
+        .withAutomaticReconnect([0, 1000, 2000, 5000, 10000]) // More aggressive initial retry
         .configureLogging('information')
         .build();
 
-      // Set up event handlers
+      // Set up event handlers with connection ID filtering
       this.connection.on('LockEmployee', (id: number, connectionId: string) => {
         this.trigger('LockEmployee', id, connectionId);
       });
@@ -31,8 +34,8 @@ export class SignalRService {
         this.trigger('LockStatusUpdate', lockStatus);
       });
 
-      this.connection.on('EmployeeUpdated', (id: number, propertyName: string, value: unknown) => {
-        this.trigger('EmployeeUpdated', id, propertyName, value);
+      this.connection.on('EmployeeUpdated', (id: number, propertyName: string, value: unknown, updatedByConnectionId: string) => {
+        this.trigger('EmployeeUpdated', id, propertyName, value, updatedByConnectionId);
       });
 
       // Set up connection state change handlers
@@ -49,7 +52,7 @@ export class SignalRService {
       });
 
       await this.connection.start();
-      console.log('SignalR connected');
+      console.log('SignalR connected successfully with connection ID:', this.connection.connectionId);
     } catch (error) {
       console.error('Failed to connect to SignalR:', error);
       throw error;

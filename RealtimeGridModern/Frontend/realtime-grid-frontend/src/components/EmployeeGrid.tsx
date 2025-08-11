@@ -115,18 +115,32 @@ const EmployeeGrid: React.FC = () => {
     };
 
     const connectSignalR = async (retryCount = 0) => {
-      const maxRetries = 3;
+      const maxRetries = 5; // Increased retry count
       
       try {
         const service = signalRService.current;
+        
+        // Add a delay before connection, especially on first attempt
+        if (retryCount === 0) {
+          await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second on first attempt
+        }
+        
         await service.connect();
         setSignalRConnected(true);
         console.log('SignalR connected successfully');
         
         service.on('LockEmployee', (...args: unknown[]) => {
-          const [id] = args as [number, string];
-          setLockedEmployees(prev => new Set([...prev, id]));
-          toast.success(`Employee ${id} locked by another user`);
+          const [id, lockingConnectionId] = args as [number, string];
+          const currentConnectionId = service.getConnectionId();
+          
+          // Only show notification if it's not from this connection
+          if (lockingConnectionId !== currentConnectionId) {
+            setLockedEmployees(prev => new Set([...prev, id]));
+            toast.success(`Employee ${id} locked by another user`);
+          } else {
+            // Still update the state for our own locks
+            setLockedEmployees(prev => new Set([...prev, id]));
+          }
         });
 
         service.on('UnlockEmployee', (...args: unknown[]) => {
@@ -149,11 +163,18 @@ const EmployeeGrid: React.FC = () => {
         });
 
         service.on('EmployeeUpdated', (...args: unknown[]) => {
-          const [id, propertyName, value] = args as [number, string, unknown];
+          const [id, propertyName, value, updatedByConnectionId] = args as [number, string, unknown, string];
+          const currentConnectionId = service.getConnectionId();
+          
+          // Update the employee data regardless of who updated it
           setEmployees(prev => prev.map(emp => 
             emp.id === id ? { ...emp, [propertyName]: value } : emp
           ));
-          toast.success(`Employee ${id} updated by another user`);
+          
+          // Only show notification if it's not from this connection
+          if (updatedByConnectionId !== currentConnectionId) {
+            toast.success(`Employee ${id} updated by another user`);
+          }
         });
 
         // Get initial lock status
@@ -167,12 +188,17 @@ const EmployeeGrid: React.FC = () => {
         setSignalRConnected(false);
         
         if (retryCount < maxRetries) {
-          const delay = Math.min(1000 * Math.pow(2, retryCount), 10000); // Exponential backoff up to 10 seconds
+          const delay = Math.min(1000 * Math.pow(2, retryCount), 5000); // Exponential backoff up to 5 seconds
           console.log(`Retrying SignalR connection in ${delay}ms... (attempt ${retryCount + 1}/${maxRetries})`);
+          
+          // Only show toast on first failure and final failure
+          if (retryCount === 0) {
+            toast.error('Connection to real-time updates failed. Retrying...');
+          }
+          
           setTimeout(() => connectSignalR(retryCount + 1), delay);
-          toast.error(`Connection failed. Retrying in ${delay / 1000} seconds...`);
         } else {
-          toast.error('Failed to connect to real-time updates after multiple attempts. Some features may not work.');
+          toast.error('Failed to connect to real-time updates after multiple attempts. Refreshing the page may help.');
         }
       }
     };

@@ -109,8 +109,8 @@ namespace RealtimeGrid.Api.Hubs
                     _context.Entry(employee).State = EntityState.Modified;
                     await _context.SaveChangesAsync();
                     
-                    // Notify all clients (including caller) of the update
-                    await Clients.All.SendAsync("EmployeeUpdated", id, propertyName, value);
+                    // Notify only OTHER clients (not the caller) of the update, include the connection ID
+                    await Clients.Others.SendAsync("EmployeeUpdated", id, propertyName, value, Context.ConnectionId);
                 }
             }
         }
