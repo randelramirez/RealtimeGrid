@@ -2,36 +2,58 @@ import { HubConnection, HubConnectionBuilder } from '@microsoft/signalr';
 
 export class SignalRService {
   private connection: HubConnection | null = null;
-  private callbacks: Map<string, Function[]> = new Map();
+  private callbacks: Map<string, ((...args: unknown[]) => void)[]> = new Map();
 
   async connect(): Promise<void> {
-    this.connection = new HubConnectionBuilder()
-      .withUrl('http://localhost:5000/employeeHub')
-      .build();
+    try {
+      this.connection = new HubConnectionBuilder()
+        .withUrl('http://localhost:5043/employeeHub', {
+          timeout: 30000, // 30 seconds timeout
+        })
+        .withAutomaticReconnect([0, 2000, 10000, 30000]) // Retry delays in ms
+        .configureLogging('information')
+        .build();
 
-    // Set up event handlers
-    this.connection.on('LockEmployee', (id: number, connectionId: string) => {
-      this.trigger('LockEmployee', id, connectionId);
-    });
+      // Set up event handlers
+      this.connection.on('LockEmployee', (id: number, connectionId: string) => {
+        this.trigger('LockEmployee', id, connectionId);
+      });
 
-    this.connection.on('UnlockEmployee', (id: number) => {
-      this.trigger('UnlockEmployee', id);
-    });
+      this.connection.on('UnlockEmployee', (id: number) => {
+        this.trigger('UnlockEmployee', id);
+      });
 
-    this.connection.on('LockFailed', (id: number) => {
-      this.trigger('LockFailed', id);
-    });
+      this.connection.on('LockFailed', (id: number) => {
+        this.trigger('LockFailed', id);
+      });
 
-    this.connection.on('LockStatusUpdate', (lockStatus: Record<number, string>) => {
-      this.trigger('LockStatusUpdate', lockStatus);
-    });
+      this.connection.on('LockStatusUpdate', (lockStatus: Record<number, string>) => {
+        this.trigger('LockStatusUpdate', lockStatus);
+      });
 
-    this.connection.on('EmployeeUpdated', (id: number, propertyName: string, value: any) => {
-      this.trigger('EmployeeUpdated', id, propertyName, value);
-    });
+      this.connection.on('EmployeeUpdated', (id: number, propertyName: string, value: unknown) => {
+        this.trigger('EmployeeUpdated', id, propertyName, value);
+      });
 
-    await this.connection.start();
-    console.log('SignalR connected');
+      // Set up connection state change handlers
+      this.connection.onclose(() => {
+        console.log('SignalR connection closed');
+      });
+
+      this.connection.onreconnecting(() => {
+        console.log('SignalR connection reconnecting');
+      });
+
+      this.connection.onreconnected(() => {
+        console.log('SignalR connection reconnected');
+      });
+
+      await this.connection.start();
+      console.log('SignalR connected');
+    } catch (error) {
+      console.error('Failed to connect to SignalR:', error);
+      throw error;
+    }
   }
 
   async disconnect(): Promise<void> {
@@ -41,38 +63,52 @@ export class SignalRService {
     }
   }
 
+  private ensureConnection(): void {
+    if (!this.connection) {
+      throw new Error('Cannot send data if the connection is not initialized.');
+    }
+    
+    if (this.connection.state !== 'Connected') {
+      throw new Error('Cannot send data if the connection is not in the \'Connected\' State.');
+    }
+  }
+
   async lockEmployee(id: number): Promise<void> {
+    this.ensureConnection();
     if (this.connection) {
       await this.connection.invoke('Lock', id);
     }
   }
 
   async unlockEmployee(id: number): Promise<void> {
+    this.ensureConnection();
     if (this.connection) {
       await this.connection.invoke('Unlock', id);
     }
   }
 
-  async updateEmployee(id: number, propertyName: string, value: any): Promise<void> {
+  async updateEmployee(id: number, propertyName: string, value: unknown): Promise<void> {
+    this.ensureConnection();
     if (this.connection) {
       await this.connection.invoke('UpdateEmployee', id, propertyName, value);
     }
   }
 
   async getLockStatus(): Promise<void> {
+    this.ensureConnection();
     if (this.connection) {
       await this.connection.invoke('GetLockStatus');
     }
   }
 
-  on(event: string, callback: Function): void {
+  on(event: string, callback: (...args: unknown[]) => void): void {
     if (!this.callbacks.has(event)) {
       this.callbacks.set(event, []);
     }
     this.callbacks.get(event)!.push(callback);
   }
 
-  off(event: string, callback: Function): void {
+  off(event: string, callback: (...args: unknown[]) => void): void {
     const callbacks = this.callbacks.get(event);
     if (callbacks) {
       const index = callbacks.indexOf(callback);
@@ -82,7 +118,7 @@ export class SignalRService {
     }
   }
 
-  private trigger(event: string, ...args: any[]): void {
+  private trigger(event: string, ...args: unknown[]): void {
     const callbacks = this.callbacks.get(event);
     if (callbacks) {
       callbacks.forEach(callback => callback(...args));
@@ -91,5 +127,13 @@ export class SignalRService {
 
   getConnectionId(): string | null {
     return this.connection?.connectionId || null;
+  }
+
+  getConnectionState(): string | null {
+    return this.connection?.state || null;
+  }
+
+  isConnected(): boolean {
+    return this.connection?.state === 'Connected';
   }
 }

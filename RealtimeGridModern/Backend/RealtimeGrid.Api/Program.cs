@@ -4,13 +4,23 @@ using RealtimeGrid.Api.Hubs;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Configure logging
+builder.Logging.ClearProviders();
+builder.Logging.AddConsole();
+builder.Logging.SetMinimumLevel(LogLevel.Information);
+
 // Add services to the container.
 builder.Services.AddControllers();
 builder.Services.AddDbContext<RealtimeGridContext>(options =>
     options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection") ?? "Data Source=realtimegrid.db"));
 
-// Add SignalR
-builder.Services.AddSignalR();
+// Add SignalR with detailed logging
+builder.Services.AddSignalR(options =>
+{
+    options.EnableDetailedErrors = true;
+    options.ClientTimeoutInterval = TimeSpan.FromSeconds(60);
+    options.KeepAliveInterval = TimeSpan.FromSeconds(30);
+});
 
 // Add CORS
 builder.Services.AddCors(options =>

@@ -98,6 +98,7 @@ const EmployeeGrid: React.FC = () => {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editingData, setEditingData] = useState<Partial<Employee>>({});
   const [lockedEmployees, setLockedEmployees] = useState<Set<number>>(new Set());
+  const [signalRConnected, setSignalRConnected] = useState(false);
   const signalRService = useRef<SignalRService>(new SignalRService());
 
   useEffect(() => {
@@ -113,16 +114,23 @@ const EmployeeGrid: React.FC = () => {
       }
     };
 
-    const connectSignalR = async () => {
+    const connectSignalR = async (retryCount = 0) => {
+      const maxRetries = 3;
+      
       try {
-        await signalRService.current.connect();
+        const service = signalRService.current;
+        await service.connect();
+        setSignalRConnected(true);
+        console.log('SignalR connected successfully');
         
-        signalRService.current.on('LockEmployee', (id: number, _connectionId: string) => {
+        service.on('LockEmployee', (...args: unknown[]) => {
+          const [id] = args as [number, string];
           setLockedEmployees(prev => new Set([...prev, id]));
           toast.success(`Employee ${id} locked by another user`);
         });
 
-        signalRService.current.on('UnlockEmployee', (id: number) => {
+        service.on('UnlockEmployee', (...args: unknown[]) => {
+          const [id] = args as [number];
           setLockedEmployees(prev => {
             const newSet = new Set(prev);
             newSet.delete(id);
@@ -130,15 +138,18 @@ const EmployeeGrid: React.FC = () => {
           });
         });
 
-        signalRService.current.on('LockFailed', (id: number) => {
+        service.on('LockFailed', (...args: unknown[]) => {
+          const [id] = args as [number];
           toast.error(`Cannot edit employee ${id} - already locked by another user`);
         });
 
-        signalRService.current.on('LockStatusUpdate', (lockStatus: Record<number, string>) => {
+        service.on('LockStatusUpdate', (...args: unknown[]) => {
+          const [lockStatus] = args as [Record<number, string>];
           setLockedEmployees(new Set(Object.keys(lockStatus).map(Number)));
         });
 
-        signalRService.current.on('EmployeeUpdated', (id: number, propertyName: string, value: any) => {
+        service.on('EmployeeUpdated', (...args: unknown[]) => {
+          const [id, propertyName, value] = args as [number, string, unknown];
           setEmployees(prev => prev.map(emp => 
             emp.id === id ? { ...emp, [propertyName]: value } : emp
           ));
@@ -146,18 +157,32 @@ const EmployeeGrid: React.FC = () => {
         });
 
         // Get initial lock status
-        await signalRService.current.getLockStatus();
+        try {
+          await service.getLockStatus();
+        } catch (lockStatusError) {
+          console.warn('Failed to get initial lock status:', lockStatusError);
+        }
       } catch (error) {
         console.error('Failed to connect to SignalR:', error);
-        toast.error('Failed to connect to real-time updates');
+        setSignalRConnected(false);
+        
+        if (retryCount < maxRetries) {
+          const delay = Math.min(1000 * Math.pow(2, retryCount), 10000); // Exponential backoff up to 10 seconds
+          console.log(`Retrying SignalR connection in ${delay}ms... (attempt ${retryCount + 1}/${maxRetries})`);
+          setTimeout(() => connectSignalR(retryCount + 1), delay);
+          toast.error(`Connection failed. Retrying in ${delay / 1000} seconds...`);
+        } else {
+          toast.error('Failed to connect to real-time updates after multiple attempts. Some features may not work.');
+        }
       }
     };
 
     loadEmployees();
     connectSignalR();
 
+    const service = signalRService.current;
     return () => {
-      signalRService.current.disconnect();
+      service.disconnect();
     };
   }, []);
 
@@ -171,13 +196,19 @@ const EmployeeGrid: React.FC = () => {
       return;
     }
 
+    // Check if SignalR is connected
+    if (!signalRService.current.isConnected()) {
+      toast.error('Real-time connection is not available. Cannot edit employee.');
+      return;
+    }
+
     try {
       await signalRService.current.lockEmployee(id);
       setEditingId(id);
       setEditingData({ ...employee });
     } catch (error) {
       console.error('Failed to lock employee:', error);
-      toast.error('Failed to lock employee for editing');
+      toast.error('Failed to lock employee for editing. Please check your connection.');
     }
   };
 
@@ -190,21 +221,35 @@ const EmployeeGrid: React.FC = () => {
         emp.id === id ? { ...emp, ...editingData } : emp
       ));
 
-      // Send updates through SignalR for each changed field
-      const originalEmployee = employees.find(emp => emp.id === id);
-      if (originalEmployee) {
-        for (const [key, value] of Object.entries(editingData)) {
-          if (originalEmployee[key as keyof Employee] !== value) {
-            await signalRService.current.updateEmployee(id, key, value);
+      // Send updates through SignalR for each changed field (only if connected)
+      if (signalRService.current.isConnected()) {
+        const originalEmployee = employees.find(emp => emp.id === id);
+        if (originalEmployee) {
+          for (const [key, value] of Object.entries(editingData)) {
+            if (originalEmployee[key as keyof Employee] !== value) {
+              try {
+                await signalRService.current.updateEmployee(id, key, value);
+              } catch (signalRError) {
+                console.warn('Failed to send real-time update:', signalRError);
+              }
+            }
           }
         }
       }
 
-      await signalRService.current.unlockEmployee(id);
+      // Unlock the employee (with error handling)
+      if (signalRService.current.isConnected()) {
+        try {
+          await signalRService.current.unlockEmployee(id);
+        } catch (signalRError) {
+          console.warn('Failed to unlock employee via SignalR:', signalRError);
+        }
+      }
+      
       setEditingId(null);
       setEditingData({});
       
-      // Remove from locked state locally (will be confirmed by SignalR)
+      // Remove from locked state locally (will be confirmed by SignalR if connected)
       setLockedEmployees(prev => {
         const newSet = new Set(prev);
         newSet.delete(id);
@@ -220,18 +265,26 @@ const EmployeeGrid: React.FC = () => {
 
   const handleCancel = async (id: number) => {
     try {
-      await signalRService.current.unlockEmployee(id);
+      // Unlock the employee (with error handling)
+      if (signalRService.current.isConnected()) {
+        try {
+          await signalRService.current.unlockEmployee(id);
+        } catch (signalRError) {
+          console.warn('Failed to unlock employee via SignalR:', signalRError);
+        }
+      }
+      
       setEditingId(null);
       setEditingData({});
       
-      // Remove from locked state locally (will be confirmed by SignalR)
+      // Remove from locked state locally (will be confirmed by SignalR if connected)
       setLockedEmployees(prev => {
         const newSet = new Set(prev);
         newSet.delete(id);
         return newSet;
       });
     } catch (error) {
-      console.error('Failed to unlock employee:', error);
+      console.error('Failed to cancel edit:', error);
     }
   };
 
@@ -249,6 +302,9 @@ const EmployeeGrid: React.FC = () => {
   return (
     <div className="employee-grid">
       <h1 style={{color:'blue'}}>Real-time Employee Grid</h1>
+      <div className="status-bar" style={{ marginBottom: '1rem', padding: '0.5rem', backgroundColor: signalRConnected ? '#d4edda' : '#f8d7da', border: '1px solid ' + (signalRConnected ? '#c3e6cb' : '#f5c6cb'), borderRadius: '0.25rem' }}>
+        <strong>Connection Status:</strong> {signalRConnected ? '✅ Connected to real-time updates' : '❌ Disconnected - Limited functionality'}
+      </div>
       <p className="instructions">
         Open this page in multiple browser windows/tabs to see real-time collaborative editing in action!
       </p>
