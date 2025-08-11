@@ -1,4 +1,4 @@
-# RealtimeGrid - Modernized with TanStack Query
+# RealtimeGrid - Modernized
 
 A real-time collaborative employee grid application built with .NET 9 Web API and React TypeScript, featuring modern state management and optimistic updates.
 
