@@ -1,3 +1,7 @@
+# About this repo
+
+A simple application that demonstrates SignalR, ASP.NET Core, and React as the frontend
+
 # RealtimeGrid - Modernized
 
 A real-time collaborative employee grid application built with .NET 9 Web API and React TypeScript, featuring modern state management and optimistic updates.
