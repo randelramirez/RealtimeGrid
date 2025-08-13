@@ -257,3 +257,85 @@ npm run build
 - ✅ **Fixed Toast Spam** - Eliminated repeated error notifications
 - ✅ **Enhanced Caching** - Intelligent background data synchronization
 - ✅ **Better Error Handling** - Automatic retry with rollback capabilities
+
+# RealtimeGrid
+
+A real-time collaborative data grid application that allows multiple users to view and edit employee data simultaneously with conflict resolution through record locking.
+
+## Features
+
+- **Real-time Updates**: Changes made by one user are instantly reflected across all connected clients
+- **Record Locking**: Prevents data conflicts by locking records when a user starts editing
+- **Employee Management**: Full CRUD operations for employee data (Name, Email, Sex, Salary)
+- **Multi-user Support**: Multiple users can work on different records simultaneously
+- **Visual Feedback**: Users can see which records are being edited by others
+
+## Technology Stack
+
+### Backend (.NET Core)
+- **ASP.NET Core 9.0**: Web API framework
+- **SignalR**: Real-time communication between server and clients
+- **Entity Framework Core**: ORM for data access
+- **SQLite**: Database for storing employee data
+
+### Frontend
+- **React**: User interface framework
+- **Vite**: Build tool and development server
+- **SignalR Client**: For real-time communication with the server
+
+## Architecture
+
+The application uses SignalR hubs to manage real-time communication:
+- `EmployeeHub`: Handles locking/unlocking of employee records and broadcasts updates
+- Connection tracking ensures locks are released when users disconnect
+- In-memory storage tracks which records are locked by which connections
+
+## Getting Started
+
+### Prerequisites
+- .NET 9.0 SDK
+- Node.js (for frontend development)
+
+### Running the Backend
+1. Navigate to the Backend directory
+2. Run the API:
+   ```bash
+   dotnet run --project RealtimeGrid.Api
+   ```
+
+### Running the Frontend
+1. Navigate to the Frontend directory
+2. Install dependencies:
+   ```bash
+   npm install
+   ```
+3. Start the development server:
+   ```bash
+   npm run dev
+   ```
+
+The application will be available at `http://localhost:5173` (frontend) and the API at the configured backend port.
+
+## Alternative Implementation
+
+🚀 **Node.js + Express + Socket.io Implementation Available**
+
+For developers who prefer a Node.js backend, there's an alternative implementation of this project using Express and Socket.io:
+
+**Repository**: [RealTimeGrid-NodeJs](https://github.com/randelramirez/RealTimeGrid-NodeJs)
+
+This Node.js version provides the same real-time collaborative features with:
+- Express.js backend
+- Socket.io for real-time communication  
+- Same frontend React application
+- Compatible feature set and user experience
+
+Choose the implementation that best fits your technology stack preferences!
+
+## Contributing
+
+Feel free to submit issues and pull requests to improve the application.
+
+## License
+
+This project is open source and available under the MIT License.
